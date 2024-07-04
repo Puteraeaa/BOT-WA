@@ -1,12 +1,21 @@
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
 const { makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
 const pino = require('pino');
+const QRCode = require('qrcode');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Set your API key as an environment variable
 const API_KEY = 'AIzaSyCqL-076Vg2R2eB4VneqgBx7cX5727DL-8';
 const genAI = new GoogleGenerativeAI(API_KEY);
-
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server);
+
+app.use(express.static('public'));
 
 async function connectToWhatsapp() {
     const authState = await useMultiFileAuthState('session');
@@ -30,7 +39,15 @@ async function connectToWhatsapp() {
             console.log('Connecting...');
         }
         if (qr) {
-            console.log(qr);
+            console.log('QR Code received, sending to client...');
+            // Convert QR code to data URL and send to client
+            QRCode.toDataURL(qr, (err, url) => {
+                if (err) {
+                    console.error('Failed to generate QR code:', err);
+                    return;
+                }
+                io.emit('qr', url);
+            });
         }
     });
 
@@ -41,7 +58,7 @@ async function connectToWhatsapp() {
                 const text = getMessageText(message);
                 if (text) {
                     // Send default welcome message
-                    await sock.sendMessage(message.key.remoteJid, { text: "Selamat datang di Bot Whatsapp Uta, saya sedang memproses pesan anda" });
+                    await sock.sendMessage(message.key.remoteJid, { text: "Selamat datang di Bot Whatsapp Uta" });
 
                     // Generate AI response and send it
                     const generatedText = await generateAIResponse(text);
@@ -79,3 +96,7 @@ async function generateAIResponse(prompt) {
 }
 
 connectToWhatsapp();
+
+server.listen(3000, () => {
+    console.log('Server is running on http://localhost:4000');
+});
